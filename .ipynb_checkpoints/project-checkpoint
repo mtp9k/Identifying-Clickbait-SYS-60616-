@@ -1,0 +1,666 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 70,
+   "id": "optimum-fifth",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import sklearn\n",
+    "assert sklearn.__version__ >= \"0.20\"\n",
+    "import tensorflow as tf\n",
+    "from tensorflow import keras\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.preprocessing import StandardScaler\n",
+    "from tensorflow import feature_column\n",
+    "from tensorflow.keras.layers import Embedding, LSTM\n",
+    "from tensorflow.keras import layers\n",
+    "from tensorflow.keras import layers\n",
+    "from tensorflow.keras.layers.experimental import preprocessing\n",
+    "from tensorflow.keras import losses\n",
+    "from tensorflow.keras.layers.experimental.preprocessing import TextVectorization"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "verified-dating",
+   "metadata": {},
+   "source": [
+    "## Parsing Dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "approximate-august",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!rm -r text"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "historic-allocation",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!mkdir text\n",
+    "!mkdir text/clickbait\n",
+    "!mkdir text/normal"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 77,
+   "id": "alleged-infrastructure",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df = pd.read_csv('clickbait_data.csv')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 80,
+   "id": "consecutive-contributor",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.model_selection import train_test_split\n",
+    "\n",
+    "train, test = train_test_split(df, test_size=0.1,random_state=seed)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 81,
+   "id": "surprised-township",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "train.to_csv('clickbait_train.csv',index=False)\n",
+    "test.to_csv('clickbait_test.csv',index=False)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 82,
+   "id": "consecutive-southeast",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "df = pd.read_csv('clickbait_train.csv')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 83,
+   "id": "stupid-whole",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "normal = df.loc[df['clickbait']==0]['headline'].values\n",
+    "clickbait = df.loc[df['clickbait']==1]['headline'].values"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 84,
+   "id": "every-bride",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def generateTensorflowTextDir(data,folderName):\n",
+    "    for i,line in enumerate(data):\n",
+    "        filename = f'{i}_{folderName}'\n",
+    "        with open(f\"text/{folderName}/{filename}.txt\", \"w\") as outfile:\n",
+    "            outfile.write(line)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 85,
+   "id": "bound-lighting",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "generateTensorflowTextDir(normal,'normal')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 86,
+   "id": "western-bahamas",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "generateTensorflowTextDir(clickbait,'clickbait')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 135,
+   "id": "asian-tours",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Batch Size -- we set to 1 to just read it in\n",
+    "BATCH_SIZE = 512\n",
+    "DATASET_SIZE = 32000\n",
+    "train_size = 32000 - 6400\n",
+    "test_size =6400\n",
+    "seed = 49"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 136,
+   "id": "nuclear-distance",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Found 32072 files belonging to 2 classes.\n",
+      "Using 25658 files for training.\n"
+     ]
+    }
+   ],
+   "source": [
+    "raw_train_ds = tf.keras.preprocessing.text_dataset_from_directory(\n",
+    "    'text',\n",
+    "    batch_size=BATCH_SIZE,\n",
+    "    class_names=['normal','clickbait'],\n",
+    "    subset='training',\n",
+    "    validation_split=0.2, \n",
+    "    seed=seed\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 137,
+   "id": "applicable-cloud",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Label 0 corresponds to normal\n",
+      "Label 1 corresponds to clickbait\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(\"Label 0 corresponds to\", raw_train_ds.class_names[0])\n",
+    "print(\"Label 1 corresponds to\", raw_train_ds.class_names[1])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 138,
+   "id": "looking-squad",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Found 32072 files belonging to 2 classes.\n",
+      "Using 6414 files for validation.\n"
+     ]
+    }
+   ],
+   "source": [
+    "raw_val_ds = tf.keras.preprocessing.text_dataset_from_directory(\n",
+    "   'text/',\n",
+    "    batch_size=BATCH_SIZE,\n",
+    "    class_names=['normal','clickbait'],\n",
+    "    validation_split=0.2, \n",
+    "    subset='validation', \n",
+    "    seed=seed)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 139,
+   "id": "israeli-richards",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "tf.Tensor(\n",
+      "[b\"17 Roommates Who Can't Wait To Move Out\"\n",
+      " b'15 Things Your Dentist Actually Wants You To Know'\n",
+      " b'Taraji P. Henson Responded Perfectly When Her Golden Globes Speech Was Almost Cut Short'\n",
+      " b'WWE Superstar Daniel Bryan Has Announces His Retirement From Pro Wrestling Via Twitter'\n",
+      " b'Radical Group declares Tsunami punishment from God'\n",
+      " b'New Flexibility at Music Labels Aims to Help Web Start-Ups Thrive'\n",
+      " b'The Cowboys Win a Wild One'\n",
+      " b'Schr\\xc3\\xb6der gives up German chancellorship ambitions, makes way for Merkel'\n",
+      " b'What 2015 Meme Are You Based On Your Zodiac Sign'\n",
+      " b'Daily and Sunday Sport owners to enter administration'], shape=(10,), dtype=string) tf.Tensor([1 1 1 1 0 0 0 0 1 0], shape=(10,), dtype=int32)\n"
+     ]
+    }
+   ],
+   "source": [
+    "for x,y in raw_train_ds.take(1):\n",
+    "    print(x[0:10],y[0:10])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 140,
+   "id": "premier-judges",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def custom_standardization(input_data):\n",
+    "    lowercase = tf.strings.lower(input_data)\n",
+    "    return input_data\n",
+    "    return lowercase"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 141,
+   "id": "gentle-sussex",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "max_features = 5000\n",
+    "sequence_length = 500\n",
+    "\n",
+    "vectorize_layer = TextVectorization(\n",
+    "#     standardize=custom_standardization,\n",
+    "    max_tokens=max_features,\n",
+    "    output_mode='int',\n",
+    "    output_sequence_length=sequence_length)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 142,
+   "id": "still-gothic",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Make a text-only dataset (without labels), then call adapt\n",
+    "train_text = raw_train_ds.map(lambda x, y: x)\n",
+    "vectorize_layer.adapt(train_text)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 143,
+   "id": "careful-latino",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def vectorize_text(text, label):\n",
+    "    #text = tf.expand_dims(text, -1)\n",
+    "    return vectorize_layer(text), label"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 144,
+   "id": "regular-robertson",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "train_ds = raw_train_ds.map(vectorize_text)\n",
+    "val_ds = raw_val_ds.map(vectorize_text)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 145,
+   "id": "standing-patent",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "AUTOTUNE = tf.data.AUTOTUNE\n",
+    "\n",
+    "train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)\n",
+    "val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 146,
+   "id": "motivated-tucson",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "embedding_dim = 32"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ordered-logging",
+   "metadata": {},
+   "source": [
+    "## Models"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 158,
+   "id": "important-constant",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Model: \"sequential\"\n",
+      "_________________________________________________________________\n",
+      "Layer (type)                 Output Shape              Param #   \n",
+      "=================================================================\n",
+      "embedding (Embedding)        (None, 500, 32)           160000    \n",
+      "_________________________________________________________________\n",
+      "lstm (LSTM)                  (None, 500, 32)           8320      \n",
+      "_________________________________________________________________\n",
+      "global_average_pooling1d (Gl (None, 32)                0         \n",
+      "_________________________________________________________________\n",
+      "dropout (Dropout)            (None, 32)                0         \n",
+      "_________________________________________________________________\n",
+      "dense (Dense)                (None, 1)                 33        \n",
+      "=================================================================\n",
+      "Total params: 168,353\n",
+      "Trainable params: 168,353\n",
+      "Non-trainable params: 0\n",
+      "_________________________________________________________________\n"
+     ]
+    }
+   ],
+   "source": [
+    "keras.backend.clear_session()\n",
+    "model = tf.keras.Sequential([\n",
+    "  layers.Embedding(max_features, embedding_dim,input_length=sequence_length),\n",
+    "  LSTM(32, return_sequences=True),\n",
+    "  layers.GlobalAveragePooling1D(),\n",
+    "  layers.Dropout(0.2),\n",
+    "  layers.Dense(1,activation='sigmoid')])\n",
+    "\n",
+    "model.summary()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 159,
+   "id": "dying-satin",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "#[tf.metrics.BinaryAccuracy(threshold=0.5]\n",
+    "optimizer = keras.optimizers.Adam(lr=0.0001)\n",
+    "model.compile(loss=losses.BinaryCrossentropy(from_logits=True),\n",
+    "              optimizer='adam',\n",
+    "              metrics=['accuracy'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 160,
+   "id": "diagnostic-forestry",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/5\n",
+      "51/51 [==============================] - 33s 629ms/step - loss: 0.6931 - accuracy: 0.5073 - val_loss: 0.6923 - val_accuracy: 0.5058\n",
+      "Epoch 2/5\n",
+      "51/51 [==============================] - 31s 605ms/step - loss: 0.6542 - accuracy: 0.5950 - val_loss: 0.2227 - val_accuracy: 0.9420\n",
+      "Epoch 3/5\n",
+      "51/51 [==============================] - 32s 626ms/step - loss: 0.1908 - accuracy: 0.9540 - val_loss: 0.1762 - val_accuracy: 0.9571\n",
+      "Epoch 4/5\n",
+      "51/51 [==============================] - 32s 622ms/step - loss: 0.1382 - accuracy: 0.9693 - val_loss: 0.1560 - val_accuracy: 0.9638\n",
+      "Epoch 5/5\n",
+      "51/51 [==============================] - 32s 628ms/step - loss: 0.1052 - accuracy: 0.9783 - val_loss: 0.1555 - val_accuracy: 0.9654\n"
+     ]
+    }
+   ],
+   "source": [
+    "epochs = 5\n",
+    "history = model.fit(\n",
+    "    train_ds,\n",
+    "    validation_data=val_ds,\n",
+    "    epochs=epochs)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 161,
+   "id": "grave-mills",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "export_model = tf.keras.Sequential([\n",
+    "  vectorize_layer,\n",
+    "  model,\n",
+    "])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 162,
+   "id": "basic-device",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "testData = pd.read_csv('clickbait_test.csv')\n",
+    "testText = testData['headline'].values\n",
+    "testLabels = testData['clickbait'].values"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 163,
+   "id": "filled-letter",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "predictions = export_model.predict(testText)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 164,
+   "id": "executed-premium",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from sklearn.metrics import accuracy_score\n",
+    "def getAccuracy(labels,predictions):\n",
+    "    return accuracy_score(labels,np.round(predictions))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 165,
+   "id": "bottom-timeline",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0.9753125"
+      ]
+     },
+     "execution_count": 165,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from sklearn.metrics import accuracy_score\n",
+    "getAccuracy(testLabels,predictions)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "reflected-injury",
+   "metadata": {},
+   "source": [
+    "### Label Smoothing"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 166,
+   "id": "persistent-angola",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Model: \"sequential\"\n",
+      "_________________________________________________________________\n",
+      "Layer (type)                 Output Shape              Param #   \n",
+      "=================================================================\n",
+      "embedding (Embedding)        (None, 500, 32)           160000    \n",
+      "_________________________________________________________________\n",
+      "lstm (LSTM)                  (None, 500, 32)           8320      \n",
+      "_________________________________________________________________\n",
+      "global_average_pooling1d (Gl (None, 32)                0         \n",
+      "_________________________________________________________________\n",
+      "dropout (Dropout)            (None, 32)                0         \n",
+      "_________________________________________________________________\n",
+      "dense (Dense)                (None, 1)                 33        \n",
+      "=================================================================\n",
+      "Total params: 168,353\n",
+      "Trainable params: 168,353\n",
+      "Non-trainable params: 0\n",
+      "_________________________________________________________________\n"
+     ]
+    }
+   ],
+   "source": [
+    "keras.backend.clear_session()\n",
+    "model = tf.keras.Sequential([\n",
+    "  layers.Embedding(max_features, embedding_dim,input_length=sequence_length),\n",
+    "  LSTM(32, return_sequences=True),\n",
+    "  layers.GlobalAveragePooling1D(),\n",
+    "  layers.Dropout(0.2),\n",
+    "  layers.Dense(1,activation='sigmoid')])\n",
+    "\n",
+    "model.summary()\n",
+    "#[tf.metrics.BinaryAccuracy(threshold=0.5]\n",
+    "optimizer = keras.optimizers.Adam(lr=0.0001)\n",
+    "model.compile(loss=losses.BinaryCrossentropy(from_logits=True,label_smoothing=.1),\n",
+    "              optimizer='adam',\n",
+    "              metrics=['accuracy'])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 167,
+   "id": "magnetic-occasion",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/5\n",
+      "51/51 [==============================] - 31s 589ms/step - loss: 0.6931 - accuracy: 0.5060 - val_loss: 0.6926 - val_accuracy: 0.5058\n",
+      "Epoch 2/5\n",
+      "51/51 [==============================] - 32s 633ms/step - loss: 0.6912 - accuracy: 0.5366 - val_loss: 0.4440 - val_accuracy: 0.8534\n",
+      "Epoch 3/5\n",
+      "51/51 [==============================] - 32s 626ms/step - loss: 0.3768 - accuracy: 0.9049 - val_loss: 0.3127 - val_accuracy: 0.9504\n",
+      "Epoch 4/5\n",
+      "51/51 [==============================] - 32s 623ms/step - loss: 0.3023 - accuracy: 0.9570 - val_loss: 0.2986 - val_accuracy: 0.9568\n",
+      "Epoch 5/5\n",
+      "51/51 [==============================] - 32s 620ms/step - loss: 0.2806 - accuracy: 0.9665 - val_loss: 0.2945 - val_accuracy: 0.9592\n"
+     ]
+    }
+   ],
+   "source": [
+    "\n",
+    "epochs = 5\n",
+    "history = model.fit(\n",
+    "    train_ds,\n",
+    "    validation_data=val_ds,\n",
+    "    epochs=epochs)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 168,
+   "id": "respiratory-action",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "export_model = tf.keras.Sequential([\n",
+    "  vectorize_layer,\n",
+    "  model,\n",
+    "])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 169,
+   "id": "medium-pasta",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0.9753125"
+      ]
+     },
+     "execution_count": 169,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "getAccuracy(testLabels,predictions)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "egyptian-country",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.7.9"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
