@@ -1,0 +1,1 @@
+gsutil cp -r new_saved_model/bert gs://dl-project-model/bert
