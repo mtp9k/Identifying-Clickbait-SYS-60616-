@@ -58,4 +58,9 @@ def index():
     result = [res[0] for res in result]
     return {'response': result}
 
-#
+filename = os.path.join(
+os.path.dirname(__file__), 'chalicelib', 'credentials.json')
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]=filename
+result = predict_json('deeplearning-311117','us-central1','dlmodel',['hellothere'])
+print(result)
+
